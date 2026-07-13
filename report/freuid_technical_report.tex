@@ -1,6 +1,5 @@
-% FREUID Challenge 2026 — Technical Report Template (optional)
+% FREUID Challenge 2026 — Technical Report, team junesdata
 % Compile: pdflatex freuid_technical_report.tex && bibtex freuid_technical_report && pdflatex x2
-% License: CC0 — organizers provide this template; fill in your team content.
 
 \documentclass[11pt,a4paper]{article}
 
@@ -24,21 +23,18 @@
   urlcolor=blue!60!black,
 }
 
-\newcommand{\teamname}{[Team Name]}
-\newcommand{\kaggleteam}{[Kaggle Team Name]}
-\newcommand{\contactemail}{[corresponding@email.com]}
-\newcommand{\reportdate}{\today}
+\newcommand{\teamname}{junesdata}
+\newcommand{\kaggleteam}{junesdata}
+\newcommand{\contactemail}{tinkode6@gmail.com}
+\newcommand{\reportdate}{July 15, 2026}
 
 \title{%
   \textbf{The FREUID Challenge 2026}\\[0.4em]
   \large Technical Report --- \teamname
 }
 \author{%
-  [Author One]\textsuperscript{1},
-  [Author Two]\textsuperscript{2}\\
-  \small
-  \textsuperscript{1}[Affiliation One] \quad
-  \textsuperscript{2}[Affiliation Two]\\
+  Necula George-Andrei\\
+  \small Independent\\
   \texttt{\contactemail}
 }
 \date{Report date: \reportdate}
@@ -47,99 +43,205 @@
 \maketitle
 
 \begin{abstract}
-Summarize your solution in 150--250 words: task, key idea, model family, training data,
-main results on the FREUID validation/public leaderboard, and one sentence on
-reproducibility (code, container, etc.). Mention the official metric (FREUID Score;
-lower is better).
+We address binary fraud detection on identity-document images. Our key observation is
+that fraud signal in FREUID is dominantly \emph{local}: manipulations live at the level
+of pixels and small regions, while document-level semantics occur in both classes.
+Consequently we avoid full-image downscaling entirely and train binary patch
+classifiers (EfficientNetV2-S and EfficientNetV2-M, ImageNet-21k pre-trained) on random
+$512\times512$ crops taken at native resolution, with a recapture-simulation
+augmentation (resampling, moir\'e-like patterns, sensor noise, JPEG recompression)
+targeting the capture-pipeline shift emphasized by the test set. At inference each
+image is covered by an overlapping grid of $512\times512$ crops and scored by the mean
+of its top-2 crop logits; the final score is the mean of per-model ranks, a scale-free
+combination well matched to the ranking-based FREUID Score (lower is better). Training
+uses only the official FREUID training set plus iterative pseudo-labeling on the
+official public test images. Full-image baselines scored $0.20$--$0.25$ on the public
+leaderboard; the patch pipeline with pseudo-labeling and the two-model rank ensemble
+reached $\mathbf{0.00226}$. Code (MIT), frozen weights, and a no-network Docker
+container reproducing the selected submissions are public.
 \end{abstract}
 
 \noindent\textbf{Competition:} The FREUID Challenge 2026 (IJCAI-ECAI 2026)\\
 \textbf{Kaggle team:} \kaggleteam\\
-\textbf{Code:} \url{https://github.com/your-org/your-repo} (commit \texttt{[SHA]})\\
+\textbf{Code:} \url{https://github.com/4kaws/freuid-challenge-2026} (commit \texttt{[FINAL-SHA]})\\
 
 \section{Introduction}
 \label{sec:intro}
-Briefly state the fraud-detection problem, threat model (physical, GenAI, print-and-capture),
-and your high-level approach. Cite the challenge proposal or website if helpful~\cite{freuid2026}.
+The FREUID Challenge~\cite{freuid2026} asks for a calibrated fraud score for
+identity-document images under a realistic threat model: physical manipulations,
+GenAI-driven edits, and print-and-capture forgeries that suppress fragile digital
+artifacts. The evaluation emphasizes generalization: the private test set contains
+document types absent from both training data and public test data, and places
+stronger weight on recaptured (non-synthetic) examples.
+
+Early experiments showed that models trained on downscaled full images learn
+shortcuts that do not survive the distribution shift between the training generation
+batch and the test batch (public-leaderboard FREUID $\approx 0.20$--$0.25$ despite
+saturated in-distribution validation). Manual inspection indicated that semantic
+anomalies (implausible fields, mismatched attributes) occur in \emph{both} classes,
+i.e.\ they are generator noise rather than fraud signal, while true fraud is local
+pixel-level manipulation. This motivated a native-resolution patch approach.
 
 \section{Method}
 \label{sec:method}
 
 \subsection{Overview}
-Describe the end-to-end pipeline (preprocessing $\rightarrow$ model $\rightarrow$ score
-calibration). Include a block diagram if useful.
+The pipeline is: native-resolution $512\times512$ patch classifier(s)
+$\rightarrow$ overlapping grid-crop inference with top-$k$ logit pooling per image
+$\rightarrow$ cross-model rank averaging $\rightarrow$ submission scores in $[0,1]$.
 
 \subsection{Model architecture}
-Detail backbone, heads, input resolution, and any ensembles. Report parameter count and
-inference batch size.
+Two timm~\cite{timm} backbones fine-tuned as binary classifiers
+(\texttt{num\_classes=1}):
+\begin{itemize}[noitemsep]
+  \item \texttt{tf\_efficientnetv2\_s.in21k\_ft\_in1k} ($\approx$21M parameters);
+  \item \texttt{tf\_efficientnetv2\_m.in21k\_ft\_in1k} ($\approx$54M parameters).
+\end{itemize}
+Inputs are $512\times512$ RGB crops normalized with ImageNet statistics. No resizing
+is applied anywhere: crops are taken from images at their original resolution
+(images smaller than 512 px on a side are zero-padded).
 
 \subsection{Training objective and procedure}
-Loss function(s), optimizer, learning-rate schedule, epochs, early stopping, class
-balancing, and augmentations. State whether you trained from scratch or fine-tuned
-pre-trained weights.
+Binary cross-entropy with logits; AdamW (lr $3\times10^{-4}$ for V2-S with batch 48,
+$2\times10^{-4}$ for V2-M with batch 24; weight decay $10^{-2}$); OneCycle schedule;
+4 epochs; mixed precision. One random $512\times512$ crop per image per epoch with
+horizontal/vertical flips. With probability $0.3$ a \emph{recapture simulation} is
+applied to the crop: random down/up-resampling ($0.45$--$0.9\times$, mixed
+interpolation), moir\'e-like sinusoidal luminance patterns, Gaussian sensor noise,
+gamma/color drift, and JPEG recompression (quality 45--92). This augmentation targets
+the print-and-capture emphasis of the test distribution.
+
+\textbf{Iterative pseudo-labeling.} The public test images (unlabeled competition
+data) are incorporated by self-training: after each round, images with fraud
+probability $>0.98$ are pseudo-labeled fraud, and the 1{,}150 lowest-ranked images are
+pseudo-labeled genuine (rank-based rather than threshold-based, because confident
+genuine calibration collapses after the first round). Five rounds were run; each round
+retrains from ImageNet initialization on train + current pseudo-labels. Public
+leaderboard progression across rounds: $0.0587 \rightarrow 0.0350 \rightarrow 0.0224
+\rightarrow 0.0038 \rightarrow 0.0035$ (with inference improvements applied along the
+way, see Section~\ref{sec:inference}).
 
 \subsection{Score calibration}
-Explain how raw model outputs map to submission scores in $[0,1]$.
-Note any post-processing applied identically at train and test time.
+The FREUID Score is computed from the DET curve and an operating point
+(APCER@1\%BPCER), both invariant to strictly monotone transforms of the scores.
+We therefore use rank-normalized scores: for each model, per-image aggregated logits
+are converted to ranks in $[0,1]$ over the full test set; the submission score is the
+(weighted) mean of per-model ranks, clipped to $[10^{-6}, 1-10^{-6}]$.
 
 \section{Data}
 \label{sec:data}
 
 \subsection{FREUID training set}
-How you used the official \texttt{train/} images and \texttt{train.csv} metadata
-(e.g.\ splits, stratification by \texttt{type} or \texttt{is\_digital}).
+All 69{,}352 training images across the five document types were used. For model
+selection during development we used leave-one-type-out folds (train on four types,
+validate on the held-out type), which correlates with the public leaderboard far
+better than random splits (full-image models: held-out-type FREUID $\approx 0.07$--$0.22$
+vs.\ in-distribution $\approx 0$).
 
 \subsection{External data and pre-trained models}
-List every external dataset, checkpoint, or API used. Include license and URL.
-If none, state explicitly: \emph{No external data beyond FREUID and publicly licensed
-pre-trained weights.}
+\emph{No external data beyond FREUID and publicly licensed pre-trained weights.}
+Pre-trained backbones are the public timm ImageNet-21k/1k checkpoints
+(Apache-2.0)~\cite{timm}.
 
 \subsection{Validation strategy}
-Describe local validation splits and how they relate to the public leaderboard.
-Clarify that private test labels were not used for model selection.
+Development signals: (i) leave-one-type-out validation on the training types;
+(ii) the public leaderboard, used as the primary signal for the pseudo-labeling
+rounds (the public test set is explicitly designated as a development signal by the
+organizers). Private test labels were never available; private test images were not
+used for any training or tuning --- all model weights were finalized and archived
+(timestamped Kaggle dataset \texttt{junesdata/freuid-ckpts}) \emph{before} the private
+test release on July 13, 2026, 07:02 UTC.
 
 \section{Inference}
 \label{sec:inference}
-Test-time preprocessing, tiling/cropping, TTA, ensembling, and hardware. Document the
-exact command or Docker entrypoint used to produce \texttt{submission.csv} with columns
-\texttt{id,label} (reproduction sandbox).
+Each test image is covered by an overlapping $R\times C$ grid of $512\times512$ crops
+at native resolution (grid offsets evenly spaced; images smaller than the crop are
+zero-padded). Per model, the image score is the mean of the top-2 crop logits ---
+max-style pooling is essential because fraud is local (mean pooling degrades the
+public score by $\sim3\times$). Grid density improved the public score up to
+$7{\times}9=63$ crops, with saturation beyond. The submitted configurations balance
+accuracy against the 6-hour A100 verification budget.
+
+Two final picks are produced from one Docker image and one frozen weight set,
+differing only in a documented environment flag (inference orchestration only):
+\begin{itemize}[noitemsep]
+  \item \textbf{Pick 1} \texttt{VARIANT=ens2}: rank-mean of EfficientNetV2-S (round 5)
+        and EfficientNetV2-M (round 5), grid \texttt{[FINAL-GRID-1]}.
+  \item \textbf{Pick 2} \texttt{VARIANT=hedge}: adds the round-1 pseudo-label model and
+        the no-pseudo-label base model at half weight, grid \texttt{[FINAL-GRID-2]} ---
+        an out-of-distribution hedge that reduces specialization to public-test fraud
+        patterns.
+\end{itemize}
+Commands and output checksums: see Table~\ref{tab:picks} and the repository README.
+
+\begin{table}[h]
+  \centering
+  \caption{Final picks: submission $\leftrightarrow$ command $\leftrightarrow$ checksum.}
+  \label{tab:picks}
+  \small
+  \begin{tabular}{lll}
+    \toprule
+    Pick & Command & \texttt{sha256(submission.csv)} \\
+    \midrule
+    1 (\texttt{ens2})  & \texttt{docker run --network none ... -e VARIANT=ens2}  & \texttt{[CHECKSUM-1]} \\
+    2 (\texttt{hedge}) & \texttt{docker run --network none ... -e VARIANT=hedge} & \texttt{[CHECKSUM-2]} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
 
 \section{Results}
 \label{sec:results}
 
 \begin{table}[h]
   \centering
-  \caption{Summary of main results (fill with your numbers).}
+  \caption{Public-leaderboard progression (FREUID Score; lower is better).}
   \label{tab:results}
   \begin{tabular}{lcc}
     \toprule
-    Split / Leaderboard & FREUID $\downarrow$ & Notes \\
+    Configuration & Public FREUID $\downarrow$ & Notes \\
     \midrule
-    Local validation      & [0.xxx] & \\
-    Public leaderboard    & [0.xxx] & Selected final submission \\
-    Private (if known)    & [--]    & At submission time \\
+    Full-image EfficientNetV2-S @384/@768        & 0.250 / 0.202 & shortcut learning \\
+    Patch 512, $2{\times}3$ grid, top-2          & 0.0737 & \\
+    Patch 512, $3{\times}4$ grid, top-2          & 0.0587 & \\
+    + pseudo-labels (round 1)                    & 0.0350 & \\
+    + denser grid $5{\times}6$                   & 0.0276 & \\
+    + pseudo-labels (round 3)                    & 0.0224 & \\
+    + round 4, $7{\times}9$ grid                 & 0.0038 & \\
+    + round 5, $7{\times}9$ grid                 & 0.0035 & \\
+    + two-model rank ensemble (V2-S + V2-M)      & \textbf{0.00226} & \\
+    Final Pick 1 (\texttt{ens2})                 & [TBD]  & Selected final submission \\
+    Final Pick 2 (\texttt{hedge})                & [TBD]  & OOD-robust variant \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-Optional: report AuDET and APCER@1\%BPCER separately if you computed them offline.
-
 \section{Reproducibility}
 \label{sec:repro}
 \begin{itemize}[noitemsep]
-  \item \textbf{Repository:} URL + frozen commit SHA.
-  \item \textbf{Docker:} image name or build instructions; where weights live.
-  \item \textbf{Dependencies:} Python/CUDA versions; \texttt{requirements.txt}.
-  \item \textbf{Runtime:} expected GPU/CPU and wall-clock for full test inference.
-  \item \textbf{Randomness:} seeds and known non-deterministic ops.
-  \item \textbf{Network:} confirm inference requires \texttt{--network none} (no downloads at runtime).
+  \item \textbf{Repository:} \url{https://github.com/4kaws/freuid-challenge-2026},
+        commit \texttt{[FINAL-SHA]} (MIT license).
+  \item \textbf{Docker:} \texttt{docker build -f docker/Dockerfile -t freuid-solution .};
+        weights are inside the repository (Git LFS) and are copied into the image ---
+        no runtime downloads.
+  \item \textbf{Dependencies:} PyTorch 2.3.1 + CUDA 12.1 base image; timm 1.0.11;
+        OpenCV (headless); pinned in \texttt{docker/requirements.txt}.
+  \item \textbf{Runtime:} single A100 40GB; measured \texttt{[RUNTIME]} for the full
+        142{,}818-image test set at the submitted configuration (within the 6-hour
+        verification budget). CPU fallback exists but is not practical at scale.
+  \item \textbf{Randomness:} inference is deterministic up to GPU non-associativity;
+        no test-time augmentation with random components is used.
+  \item \textbf{Network:} the container runs with \texttt{--network none}; verified
+        locally before submission.
+  \item \textbf{Code freeze:} all model weights used in the final picks were archived
+        in the version history of the Kaggle dataset \texttt{junesdata/freuid-ckpts}
+        before the private test release (last weight version: July 13, 2026, 04:56 UTC).
 \end{itemize}
 
 \section{Team and contributions}
-List team members and brief roles (modeling, data, engineering, writing).
+Necula George-Andrei --- modeling, data analysis, engineering, and writing.
 
 \section*{Acknowledgments}
-Optional funding, compute grants, and organizer thanks.
+We thank the organizers and the Microblink Fraud Lab for a well-designed competition.
 
 \bibliographystyle{plain}
 \bibliography{references}
@@ -154,17 +256,25 @@ Optional funding, compute grants, and organizer thanks.
     \toprule
     Hyperparameter & Value \\
     \midrule
-    Image size & [e.g.\ 384] \\
-    Batch size & \\
-    Learning rate & \\
-    Weight decay & \\
-    Epochs & \\
-    Seed & \\
+    Crop size & $512\times512$ (native resolution, no resizing) \\
+    Batch size & 48 (V2-S) / 24 (V2-M) \\
+    Learning rate & $3\times10^{-4}$ (V2-S) / $2\times10^{-4}$ (V2-M), OneCycle \\
+    Weight decay & $10^{-2}$ \\
+    Epochs & 4 per round \\
+    Recapture augmentation prob. & 0.3 \\
+    Pseudo-label thresholds & fraud $p>0.98$; genuine = 1150 lowest-ranked \\
+    Inference pooling & mean of top-2 crop logits \\
+    Ensemble & rank mean over models \\
+    Seed & 42 (training); inference deterministic \\
     \bottomrule
   \end{tabular}
 \end{table}
 
-\section{Additional ablations}
-Optional tables/figures for ablation studies.
+\section{Negative results}
+For completeness: per-type rank normalization of a full-image model (0.83), mean
+pooling over crops (0.21), ensembling leave-one-type-out fold models into the test
+ensemble (dilutes: 0.075 vs.\ 0.035 baseline), agreement-gated pseudo-label round 2
+(0.043), a 6th blind pseudo-label round without leaderboard feedback (0.0055 vs.\
+0.0035), and denser grids beyond $7{\times}9$ (flat: 0.0036 at $9{\times}12$).
 
 \end{document}

@@ -24,10 +24,23 @@ WEIGHTS_DIR = Path(os.environ.get("FREUID_WEIGHTS_DIR", "/app/weights"))
 IMAGE_EXTENSIONS = {".jpeg", ".jpg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 
 CROP = 512
-ROWS, COLS = 5, 6   # 30 crops per image
 TOPK = 2
 BATCH_IMAGES = 8
-MODELS = ["pl5_effnetv2s.pt", "pl5m_effnetv2m.pt"]
+
+# Inference variants (one image, one frozen weight set; selected via env flag):
+#   VARIANT=ens2  (default) - Pick 1: 2-model rank ensemble, public-LB optimized
+#   VARIANT=hedge           - Pick 2: adds non-pseudo-labeled models for OOD robustness
+VARIANT = os.environ.get("FREUID_VARIANT", os.environ.get("VARIANT", "ens2"))
+VARIANTS = {
+    "ens2": {"rows": 5, "cols": 6,
+             "models": [("pl5_effnetv2s.pt", 1.0), ("pl5m_effnetv2m.pt", 1.0)]},
+    "hedge": {"rows": 3, "cols": 4,
+              "models": [("pl5_effnetv2s.pt", 1.0), ("pl5m_effnetv2m.pt", 1.0),
+                         ("pl1_effnetv2s.pt", 0.5), ("base_effnetv2s.pt", 0.5)]},
+}
+_cfg = VARIANTS[VARIANT]
+ROWS, COLS = _cfg["rows"], _cfg["cols"]
+MODELS = _cfg["models"]
 
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)
 STD = np.array([0.229, 0.224, 0.225], np.float32)
@@ -92,20 +105,22 @@ def score_model(weight_path: Path, paths, device):
 
 def predict_labels(image_rows):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"device={device} images={len(image_rows)} grid={ROWS}x{COLS} topk={TOPK}",
-          file=sys.stderr)
+    print(f"variant={VARIANT} device={device} images={len(image_rows)} "
+          f"grid={ROWS}x{COLS} topk={TOPK}", file=sys.stderr)
     ids = [rid for rid, _ in image_rows]
     paths = [p for _, p in image_rows]
     n = len(paths)
     rank_sum = np.zeros(n, np.float64)
-    for name in MODELS:
+    wsum = 0.0
+    for name, weight in MODELS:
         logits = score_model(WEIGHTS_DIR / name, paths, device)
         order = np.argsort(logits, kind="mergesort")
         ranks = np.empty(n, np.float64)
         ranks[order] = np.arange(1, n + 1)
-        rank_sum += ranks / n
-        print(f"model {name} done", file=sys.stderr)
-    label = np.clip(rank_sum / len(MODELS), 1e-6, 1 - 1e-6)
+        rank_sum += weight * ranks / n
+        wsum += weight
+        print(f"model {name} (w={weight}) done", file=sys.stderr)
+    label = np.clip(rank_sum / wsum, 1e-6, 1 - 1e-6)
     return pd.DataFrame({"id": ids, "label": label})
 
 

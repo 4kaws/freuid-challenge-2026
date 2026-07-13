@@ -36,11 +36,22 @@ publicly available timm ImageNet checkpoints.
 | `prepare_submission.py` | Inference entrypoint (organizer sandbox contract) |
 | `src/fr_common.py` | Metric, dataset, grid-crop inference utilities |
 | `src/train_patch.py` | Patch-classifier training (incl. recapture augmentation and pseudo-label ingestion) |
-| `weights/` | Frozen model weights (Git LFS): `pl5_effnetv2s.pt`, `pl5m_effnetv2m.pt` |
+| `weights/` | Frozen model weights (Git LFS): `pl5_effnetv2s.pt`, `pl5m_effnetv2m.pt`, `pl1_effnetv2s.pt`, `base_effnetv2s.pt` |
 | `docker/` | Dockerfile + requirements for the no-network verification sandbox |
 | `report/` | Technical report (PDF) |
 
-## Reproducing the submission
+## Reproducing the submissions
+
+Two final picks are produced from the **same image and the same frozen weights**,
+selected by a documented environment flag (inference orchestration only):
+
+| Final pick | Command | Output |
+| ---------- | ------- | ------ |
+| Pick 1 - `ens2` (rank ensemble, public-LB optimized) | `docker run ... -e VARIANT=ens2` | `/submissions/submission.csv` |
+| Pick 2 - `hedge` (OOD-robust mix incl. non-pseudo-labeled models) | `docker run ... -e VARIANT=hedge` | `/submissions/submission.csv` |
+
+Submission-to-command mapping and output checksums are listed in the technical
+report (`report/`).
 
 ```bash
 docker build -f docker/Dockerfile -t freuid-solution .

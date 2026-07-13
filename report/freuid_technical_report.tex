@@ -1,0 +1,170 @@
+% FREUID Challenge 2026 — Technical Report Template (optional)
+% Compile: pdflatex freuid_technical_report.tex && bibtex freuid_technical_report && pdflatex x2
+% License: CC0 — organizers provide this template; fill in your team content.
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\geometry{margin=2.5cm}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black,
+}
+
+\newcommand{\teamname}{[Team Name]}
+\newcommand{\kaggleteam}{[Kaggle Team Name]}
+\newcommand{\contactemail}{[corresponding@email.com]}
+\newcommand{\reportdate}{\today}
+
+\title{%
+  \textbf{The FREUID Challenge 2026}\\[0.4em]
+  \large Technical Report --- \teamname
+}
+\author{%
+  [Author One]\textsuperscript{1},
+  [Author Two]\textsuperscript{2}\\
+  \small
+  \textsuperscript{1}[Affiliation One] \quad
+  \textsuperscript{2}[Affiliation Two]\\
+  \texttt{\contactemail}
+}
+\date{Report date: \reportdate}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Summarize your solution in 150--250 words: task, key idea, model family, training data,
+main results on the FREUID validation/public leaderboard, and one sentence on
+reproducibility (code, container, etc.). Mention the official metric (FREUID Score;
+lower is better).
+\end{abstract}
+
+\noindent\textbf{Competition:} The FREUID Challenge 2026 (IJCAI-ECAI 2026)\\
+\textbf{Kaggle team:} \kaggleteam\\
+\textbf{Code:} \url{https://github.com/your-org/your-repo} (commit \texttt{[SHA]})\\
+
+\section{Introduction}
+\label{sec:intro}
+Briefly state the fraud-detection problem, threat model (physical, GenAI, print-and-capture),
+and your high-level approach. Cite the challenge proposal or website if helpful~\cite{freuid2026}.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Overview}
+Describe the end-to-end pipeline (preprocessing $\rightarrow$ model $\rightarrow$ score
+calibration). Include a block diagram if useful.
+
+\subsection{Model architecture}
+Detail backbone, heads, input resolution, and any ensembles. Report parameter count and
+inference batch size.
+
+\subsection{Training objective and procedure}
+Loss function(s), optimizer, learning-rate schedule, epochs, early stopping, class
+balancing, and augmentations. State whether you trained from scratch or fine-tuned
+pre-trained weights.
+
+\subsection{Score calibration}
+Explain how raw model outputs map to submission scores in $[0,1]$.
+Note any post-processing applied identically at train and test time.
+
+\section{Data}
+\label{sec:data}
+
+\subsection{FREUID training set}
+How you used the official \texttt{train/} images and \texttt{train.csv} metadata
+(e.g.\ splits, stratification by \texttt{type} or \texttt{is\_digital}).
+
+\subsection{External data and pre-trained models}
+List every external dataset, checkpoint, or API used. Include license and URL.
+If none, state explicitly: \emph{No external data beyond FREUID and publicly licensed
+pre-trained weights.}
+
+\subsection{Validation strategy}
+Describe local validation splits and how they relate to the public leaderboard.
+Clarify that private test labels were not used for model selection.
+
+\section{Inference}
+\label{sec:inference}
+Test-time preprocessing, tiling/cropping, TTA, ensembling, and hardware. Document the
+exact command or Docker entrypoint used to produce \texttt{submission.csv} with columns
+\texttt{id,label} (reproduction sandbox).
+
+\section{Results}
+\label{sec:results}
+
+\begin{table}[h]
+  \centering
+  \caption{Summary of main results (fill with your numbers).}
+  \label{tab:results}
+  \begin{tabular}{lcc}
+    \toprule
+    Split / Leaderboard & FREUID $\downarrow$ & Notes \\
+    \midrule
+    Local validation      & [0.xxx] & \\
+    Public leaderboard    & [0.xxx] & Selected final submission \\
+    Private (if known)    & [--]    & At submission time \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Optional: report AuDET and APCER@1\%BPCER separately if you computed them offline.
+
+\section{Reproducibility}
+\label{sec:repro}
+\begin{itemize}[noitemsep]
+  \item \textbf{Repository:} URL + frozen commit SHA.
+  \item \textbf{Docker:} image name or build instructions; where weights live.
+  \item \textbf{Dependencies:} Python/CUDA versions; \texttt{requirements.txt}.
+  \item \textbf{Runtime:} expected GPU/CPU and wall-clock for full test inference.
+  \item \textbf{Randomness:} seeds and known non-deterministic ops.
+  \item \textbf{Network:} confirm inference requires \texttt{--network none} (no downloads at runtime).
+\end{itemize}
+
+\section{Team and contributions}
+List team members and brief roles (modeling, data, engineering, writing).
+
+\section*{Acknowledgments}
+Optional funding, compute grants, and organizer thanks.
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\appendix
+\section{Hyperparameters}
+\label{app:hparams}
+\begin{table}[h]
+  \centering
+  \small
+  \begin{tabular}{ll}
+    \toprule
+    Hyperparameter & Value \\
+    \midrule
+    Image size & [e.g.\ 384] \\
+    Batch size & \\
+    Learning rate & \\
+    Weight decay & \\
+    Epochs & \\
+    Seed & \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Additional ablations}
+Optional tables/figures for ablation studies.
+
+\end{document}

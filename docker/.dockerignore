@@ -1,0 +1,4 @@
+.git
+*.log
+*.npy
+report/

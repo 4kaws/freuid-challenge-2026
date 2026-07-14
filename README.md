@@ -47,8 +47,8 @@ selected by a documented environment flag (inference orchestration only):
 
 | Final pick | Command | Output |
 | ---------- | ------- | ------ |
-| Pick 1 - `ens2` (rank ensemble, public-LB optimized) | `docker run ... -e VARIANT=ens2` | `/submissions/submission.csv` |
-| Pick 2 - `hedge` (OOD-robust mix incl. non-pseudo-labeled models) | `docker run ... -e VARIANT=hedge` | `/submissions/submission.csv` |
+| Pick 1 - `ens2` (rank ensemble, public-LB optimized) | `docker run --shm-size=8g ... -e VARIANT=ens2` | `/submissions/submission.csv` |
+| Pick 2 - `hedge` (OOD-robust mix incl. non-pseudo-labeled models) | `docker run --shm-size=8g ... -e VARIANT=hedge` | `/submissions/submission.csv` |
 
 Submission-to-command mapping and output checksums are listed in the technical
 report (`report/`).
@@ -62,7 +62,7 @@ docker run --rm --network none --gpus all \
   freuid-solution
 ```
 
-`/data` must be a flat directory of test images; the container writes
+`--shm-size=8g` (or larger) is recommended for multi-worker data loading; without it the script automatically falls back to single-process loading (slower but correct). `/data` must be a flat directory of test images; the container writes
 `/submissions/submission.csv` with schema `id,label` (higher label = more likely fraud).
 
 Hardware: single GPU with >= 16 GB VRAM; tested targeting one NVIDIA A100 40GB

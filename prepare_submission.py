@@ -81,6 +81,19 @@ class GridDS(Dataset):
         return torch.stack(crops), i
 
 
+def safe_workers() -> int:
+    """DataLoader workers need /dev/shm; fall back to 0 when it is tiny (default
+    Docker gives 64 MB, which crashes workers with SIGBUS)."""
+    try:
+        import shutil
+        shm_free = shutil.disk_usage("/dev/shm").free
+    except OSError:
+        return 0
+    if shm_free < 1 << 30:  # < 1 GiB
+        return 0
+    return min(8, os.cpu_count() or 1)
+
+
 @torch.no_grad()
 def score_model(weight_path: Path, paths, device):
     ck = torch.load(weight_path, map_location="cpu")
@@ -88,7 +101,7 @@ def score_model(weight_path: Path, paths, device):
     model.load_state_dict(ck["model"])
     model.to(device).eval()
     dl = DataLoader(GridDS(paths), batch_size=BATCH_IMAGES,
-                    num_workers=min(8, os.cpu_count() or 1), pin_memory=device == "cuda")
+                    num_workers=safe_workers(), pin_memory=device == "cuda")
     out = np.zeros(len(paths), np.float32)
     autocast = torch.autocast(device) if device == "cuda" else torch.no_grad()
     with autocast:

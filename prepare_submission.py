@@ -32,7 +32,7 @@ BATCH_IMAGES = 8
 #   VARIANT=hedge           - Pick 2: adds non-pseudo-labeled models for OOD robustness
 VARIANT = os.environ.get("FREUID_VARIANT", os.environ.get("VARIANT", "ens2"))
 VARIANTS = {
-    "ens2": {"rows": 5, "cols": 6,
+    "ens2": {"rows": 3, "cols": 4,
              "models": [("pl5_effnetv2s.pt", 1.0), ("pl5m_effnetv2m.pt", 1.0)]},
     "hedge": {"rows": 3, "cols": 4,
               "models": [("pl5_effnetv2s.pt", 1.0), ("pl5m_effnetv2m.pt", 1.0),

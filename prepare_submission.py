@@ -97,8 +97,10 @@ def safe_workers() -> int:
 @torch.no_grad()
 def score_model(weight_path: Path, paths, device):
     ck = torch.load(weight_path, map_location="cpu")
-    model = timm.create_model(ck["model_name"], pretrained=False, num_classes=1)
-    model.load_state_dict(ck["model"])
+    # older checkpoints (pl1/base, July 11) lack the model_name key; both are V2-S
+    name = ck.get("model_name", "tf_efficientnetv2_s.in21k_ft_in1k")
+    model = timm.create_model(name, pretrained=False, num_classes=1)
+    model.load_state_dict(ck["model"] if "model" in ck else ck)
     model.to(device).eval()
     dl = DataLoader(GridDS(paths), batch_size=BATCH_IMAGES,
                     num_workers=safe_workers(), pin_memory=device == "cuda")

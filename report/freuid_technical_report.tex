@@ -63,7 +63,7 @@ container reproducing the selected submissions are public.
 
 \noindent\textbf{Competition:} The FREUID Challenge 2026 (IJCAI-ECAI 2026)\\
 \textbf{Kaggle team:} \kaggleteam\\
-\textbf{Code:} \url{https://github.com/4kaws/freuid-challenge-2026} (commit \texttt{[FINAL-SHA]})\\
+\textbf{Code:} \url{https://github.com/4kaws/freuid-challenge-2026} (tag \texttt{v1.0-final})\\
 
 \section{Introduction}
 \label{sec:intro}
@@ -166,9 +166,9 @@ Two final picks are produced from one Docker image and one frozen weight set,
 differing only in a documented environment flag (inference orchestration only):
 \begin{itemize}[noitemsep]
   \item \textbf{Pick 1} \texttt{VARIANT=ens2}: rank-mean of EfficientNetV2-S (round 5)
-        and EfficientNetV2-M (round 5), grid \texttt{[FINAL-GRID-1]}.
+        and EfficientNetV2-M (round 5), grid $3{\times}4$ (12 crops).
   \item \textbf{Pick 2} \texttt{VARIANT=hedge}: adds the round-1 pseudo-label model and
-        the no-pseudo-label base model at half weight, grid \texttt{[FINAL-GRID-2]} ---
+        the no-pseudo-label base model at half weight, grid $3{\times}4$ ---
         an out-of-distribution hedge that reduces specialization to public-test fraud
         patterns.
 \end{itemize}
@@ -181,13 +181,25 @@ Commands and output checksums: see Table~\ref{tab:picks} and the repository READ
   \small
   \begin{tabular}{lll}
     \toprule
-    Pick & Command & \texttt{sha256(submission.csv)} \\
+    Pick & Command & \texttt{sha256(submission.csv)}\footnotemark \\
     \midrule
-    1 (\texttt{ens2})  & \texttt{docker run --network none ... -e VARIANT=ens2}  & \texttt{[CHECKSUM-1]} \\
-    2 (\texttt{hedge}) & \texttt{docker run --network none ... -e VARIANT=hedge} & \texttt{[CHECKSUM-2]} \\
+    1 (\texttt{ens2})  & \texttt{docker run --network none ... -e VARIANT=ens2}  & \texttt{8647c6cc\,\ldots\,adfdab7b} \\
+    2 (\texttt{hedge}) & \texttt{docker run --network none ... -e VARIANT=hedge} & \texttt{f54325e1\,\ldots\,c5e6d9fb} \\
     \bottomrule
   \end{tabular}
+
+  \vspace{0.5em}
+  {\scriptsize
+  \begin{tabular}{ll}
+    Pick 1: & \texttt{8647c6cc440dffeea1ce37d432ff929c43a29edfbd16f7eb79a6ff46adfdab7b} \\
+    Pick 2: & \texttt{f54325e18a47bdd549f8155404f6de626fb50a6469f1ad3747d69566c5e6d9fb} \\
+  \end{tabular}}
 \end{table}
+\footnotetext{Checksums of the submitted CSV files as produced by this pipeline
+(per-model top-2-of-12-crop logits, joint rank averaging over all 142{,}818 test
+images). Bit-level equality across GPU models is subject to floating-point
+non-associativity; rank agreement is expected to be near-perfect (see
+Section~\ref{sec:repro}, Randomness).}
 
 \section{Results}
 \label{sec:results}
@@ -209,8 +221,8 @@ Commands and output checksums: see Table~\ref{tab:picks} and the repository READ
     + round 4, $7{\times}9$ grid                 & 0.0038 & \\
     + round 5, $7{\times}9$ grid                 & 0.0035 & \\
     + two-model rank ensemble (V2-S + V2-M)      & \textbf{0.00226} & \\
-    Final Pick 1 (\texttt{ens2})                 & [TBD]  & Selected final submission \\
-    Final Pick 2 (\texttt{hedge})                & [TBD]  & OOD-robust variant \\
+    Final Pick 1 (\texttt{ens2}), $3{\times}4$ grid  & 0.00265 & Selected final submission \\
+    Final Pick 2 (\texttt{hedge}), $3{\times}4$ grid & 0.01331 & OOD-robust variant \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -219,15 +231,21 @@ Commands and output checksums: see Table~\ref{tab:picks} and the repository READ
 \label{sec:repro}
 \begin{itemize}[noitemsep]
   \item \textbf{Repository:} \url{https://github.com/4kaws/freuid-challenge-2026},
-        commit \texttt{[FINAL-SHA]} (MIT license).
+        tag \texttt{v1.0-final} (MIT license); the exact commit SHA is quoted in the
+        team's reply on the official submission thread.
   \item \textbf{Docker:} \texttt{docker build -f docker/Dockerfile -t freuid-solution .};
         weights are inside the repository (Git LFS) and are copied into the image ---
         no runtime downloads.
   \item \textbf{Dependencies:} PyTorch 2.3.1 + CUDA 12.1 base image; timm 1.0.11;
         OpenCV (headless); pinned in \texttt{docker/requirements.txt}.
-  \item \textbf{Runtime:} single A100 40GB; measured \texttt{[RUNTIME]} for the full
-        142{,}818-image test set at the submitted configuration (within the 6-hour
-        verification budget). CPU fallback exists but is not practical at scale.
+  \item \textbf{Runtime:} measured throughput on an NVIDIA L4 (fp16, $512^2$ crops:
+        160\,crops/s for V2-S, 123\,crops/s for V2-M) gives 6.9\,h (\texttt{ens2}) and
+        12.8\,h (\texttt{hedge}) wall time for the full 142{,}818-image test set
+        ($3{\times}4$ grid). On the A100 40GB verification target ($\geq 2.3\times$ L4
+        throughput on these backbones) this extrapolates to $\approx$3.0\,h
+        (\texttt{ens2}) and $\approx$5.5\,h (\texttt{hedge}), inside the 6-hour budget;
+        the $3{\times}4$ grid was chosen over denser grids specifically to respect this
+        budget. CPU fallback exists but is not practical at scale.
   \item \textbf{Randomness:} inference is deterministic up to GPU non-associativity;
         no test-time augmentation with random components is used.
   \item \textbf{Network:} the container runs with \texttt{--network none}; verified

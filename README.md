@@ -36,6 +36,7 @@ publicly available timm ImageNet checkpoints.
 | `prepare_submission.py` | Inference entrypoint (organizer sandbox contract) |
 | `src/fr_common.py` | Metric, dataset, grid-crop inference utilities |
 | `src/train_patch.py` | Patch-classifier training (incl. recapture augmentation and pseudo-label ingestion) |
+| `src/build_finals_from_cached_logits.py` | Builds the exact submitted CSVs from cached per-crop logits (same rank pipeline as `prepare_submission.py`) |
 | `weights/` | Frozen model weights (Git LFS): `pl5_effnetv2s.pt`, `pl5m_effnetv2m.pt`, `pl1_effnetv2s.pt`, `base_effnetv2s.pt` |
 | `docker/` | Dockerfile + requirements for the no-network verification sandbox |
 | `report/` | Technical report (PDF) |

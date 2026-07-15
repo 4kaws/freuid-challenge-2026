@@ -24,8 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY prepare_submission.py /app/
 COPY weights/ /app/weights/
 
-RUN useradd --create-home --uid 1000 runner
-USER runner
-
+# Runs as root: /submissions is an organizer-mounted host directory whose
+# ownership we do not control; a non-root user cannot reliably write there.
 ENTRYPOINT ["python", "/app/prepare_submission.py"]
 CMD []
